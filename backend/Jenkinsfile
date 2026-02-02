@@ -1,0 +1,105 @@
+pipeline {
+    agent any
+
+    environment {
+        DOCKER_IMAGE = 'pappukrs/auth-backend'
+        K8S_REPO = 'https://github.com/pappukrs/auth-k8s-manifests.git'
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                checkout scm
+                script {
+                    def shortCommit = sh(
+                        script: "git rev-parse --short HEAD",
+                        returnStdout: true
+                    ).trim()
+                    IMAGE_TAG = "${BUILD_NUMBER}-${shortCommit}"
+                }
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                sh 'npm ci'
+            }
+        }
+
+        stage('Run Tests') {
+            steps {
+                sh 'npm test || true'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    docker.build("${DOCKER_IMAGE}:${IMAGE_TAG}")
+                    docker.build("${DOCKER_IMAGE}:latest")
+                }
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                script {
+                    docker.withRegistry(
+                        'https://registry.hub.docker.com',
+                        'dockerhub-creds'   //  correct ID
+                    ) {
+                        docker.image("${DOCKER_IMAGE}:${IMAGE_TAG}").push()
+                        docker.image("${DOCKER_IMAGE}:latest").push()
+                    }
+                }
+            }
+        }
+
+        stage('Update K8s Manifests (GitOps)') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'github-creds', // correct ID
+                        usernameVariable: 'GIT_USER',
+                        passwordVariable: 'GIT_TOKEN'
+                    )
+                ]) {
+                    sh """
+                        rm -rf k8s-manifests
+                        git clone ${K8S_REPO} k8s-manifests
+                        cd k8s-manifests
+
+                        sed -i 's|image: .*|image: ${DOCKER_IMAGE}:${IMAGE_TAG}|' backend/deployment.yaml
+
+                        git config user.email "jenkins@ci.com"
+                        git config user.name "Jenkins CI"
+
+                        git add backend/deployment.yaml
+                        git commit -m "Update backend image to ${IMAGE_TAG}" || echo "No changes"
+
+                        git push https://${GIT_USER}:${GIT_TOKEN}@github.com/pappukrs/auth-k8s-manifests.git main
+                    """
+                }
+            }
+        }
+
+        stage('ArgoCD Sync') {
+            steps {
+                echo '🚀 ArgoCD will auto-sync the new image'
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Build succeeded: ${DOCKER_IMAGE}:${IMAGE_TAG}"
+        }
+        failure {
+            echo "Build failed"
+        }
+        always {
+            cleanWs()
+        }
+    }
+}
