@@ -1,0 +1,47 @@
+# ------------------------------
+# Node.js dependencies
+# ------------------------------
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# ------------------------------
+# Environment & secrets
+# ------------------------------
+.env
+.env.*
+!.env.example
+
+# ------------------------------
+# Logs
+# ------------------------------
+logs/
+*.log
+
+# ------------------------------
+# Git
+# ------------------------------
+.git
+.gitignore
+
+# ------------------------------
+# Docker files (local only)
+# ------------------------------
+docker-compose.yml
+docker-compose.*.yml
+
+# ------------------------------
+# OS / Editor files
+# ------------------------------
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ------------------------------
+# Tests & docs (optional)
+# ------------------------------
+test/
+tests/
+coverage/
+README.md
